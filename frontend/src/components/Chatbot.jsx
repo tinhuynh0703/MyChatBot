@@ -16,6 +16,8 @@ const Chatbot = () => {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+  console.log(123);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
