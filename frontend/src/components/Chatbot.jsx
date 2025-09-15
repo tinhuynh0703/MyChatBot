@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { MessageCircle, X, ChevronDown, Bot, User } from "lucide-react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
+import VoiceInput from "./VoiceInput";
 
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -14,7 +15,11 @@ const Chatbot = () => {
   ]);
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState(
+    localStorage.getItem("session_id") || null
+  );
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   console.log(123);
 
@@ -25,6 +30,13 @@ const Chatbot = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Lưu sessionId vào localStorage khi có thay đổi
+  useEffect(() => {
+    if (sessionId) {
+      localStorage.setItem("session_id", sessionId);
+    }
+  }, [sessionId]);
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
@@ -46,14 +58,21 @@ const Chatbot = () => {
     setMessages((prev) => [...prev, newMessage]);
     const currentInput = inputValue;
     setInputValue("");
+    resetTextarea(); // Reset height của textarea
     setLoading(true);
+
+    const api = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
     try {
       // Gọi API backend NestJS
-      const res = await axios.post("http://localhost:3000/chat", {
+      const res = await axios.post(`${api}/chat`, {
         message: currentInput,
-        stream: true,
+        session_id: sessionId,
       });
+
+      if (res.data.session_id && !sessionId) {
+        setSessionId(res.data.session_id);
+      }
 
       const { text: botText } = parseBackendResponse(res.data);
 
@@ -84,9 +103,49 @@ const Chatbot = () => {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // Function để auto resize textarea
+  const autoResizeTextarea = () => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      // Reset height để tính toán chính xác
+      textarea.style.height = "auto";
+
+      // Tính toán chiều cao cần thiết
+      const scrollHeight = textarea.scrollHeight;
+      const maxHeight = 120;
+
+      if (scrollHeight <= maxHeight) {
+        // Nếu content fit trong max height thì resize theo content
+        textarea.style.height = scrollHeight + "px";
+        textarea.style.overflowY = "hidden";
+      } else {
+        // Nếu content vượt quá max height thì giữ max height và hiển thị scroll
+        textarea.style.height = maxHeight + "px";
+        textarea.style.overflowY = "auto";
+      }
+    }
+  };
+
+  // Function để reset textarea về trạng thái ban đầu
+  const resetTextarea = () => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      textarea.style.height = "auto";
+      textarea.style.overflowY = "hidden";
+    }
+  };
+
+  // Xử lý transcript từ voice input
+  const handleVoiceTranscript = (transcript) => {
+    setInputValue(transcript);
+    // Auto resize textarea sau khi set value
+    setTimeout(autoResizeTextarea, 0);
   };
 
   // Parse backend response
@@ -245,16 +304,19 @@ const Chatbot = () => {
 
           {/* Input Area */}
           <div className="p-4 border-t border-gray-200 bg-white">
-            <div className="flex space-x-2">
-              <input
-                type="text"
+            <div className="flex space-x-2 items-end">
+              <textarea
+                ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Message..."
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                 disabled={loading}
+                rows={1}
+                onInput={autoResizeTextarea}
               />
+              <VoiceInput onTranscript={handleVoiceTranscript} />
               <button
                 onClick={handleSendMessage}
                 disabled={loading}

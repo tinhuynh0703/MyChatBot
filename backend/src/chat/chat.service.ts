@@ -1,36 +1,42 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { ChatStore } from './chat.store.js';
 
 @Injectable()
 export class ChatService {
   private genAI: GoogleGenerativeAI;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private chatStore: ChatStore,
+  ) {
     const apiKey: any = this.configService.get<string>('GEMINI_API_KEY');
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
-  async getReply(message: string): Promise<string> {
-    try {
-      const model = this.genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-      });
+  async getReply(sessionId: string, message: string): Promise<string> {
+    const history = this.chatStore.getHistory(sessionId);
 
-      const chat = model.startChat({
-        history: [
-          {
-            role: 'user',
-            parts: [{ text: 'Bạn là trợ lý cho dự án cá nhân.' }],
-          },
-        ],
-      });
+    // user message
+    history.push({ role: 'user', content: message });
 
-      const result = await chat.sendMessage(message);
-      return result.response.text();
-    } catch (err) {
-      console.error('❌ Gemini API error:', err);
-      return 'Có lỗi xảy ra khi gọi Gemini API';
-    }
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const chat = model.startChat({
+      history: history.map((h) => ({
+        role: h.role === 'assistant' ? 'model' : h.role, // fix role
+        parts: [{ text: h.content }],
+      })),
+    });
+
+    const result = await chat.sendMessage(message);
+    const reply = result.response.text();
+
+    // model message
+    history.push({ role: 'model', content: reply });
+    this.chatStore.saveHistory(sessionId, history);
+
+    return reply;
   }
 }
