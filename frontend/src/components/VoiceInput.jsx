@@ -3,9 +3,11 @@ import SpeechRecognition, {
 } from "react-speech-recognition";
 import { Mic, MicOff } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useMicrophonePermission } from "../hooks/useMicrophonePermission";
 
 export default function VoiceInput({ onTranscript }) {
   const { transcript, listening, resetTranscript } = useSpeechRecognition();
+  const micPermission = useMicrophonePermission();
   const transcriptRef = useRef(null);
 
   if (!SpeechRecognition.browserSupportsSpeechRecognition()) {
@@ -20,6 +22,10 @@ export default function VoiceInput({ onTranscript }) {
   }, [transcript]);
 
   const handleStartListening = () => {
+    if (micPermission !== "granted") {
+      alert("Bạn cần bật quyền Micro để dùng tính năng này.");
+      return;
+    }
     resetTranscript();
     SpeechRecognition.startListening({
       language: "vi-VN",
